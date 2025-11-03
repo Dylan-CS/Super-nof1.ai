@@ -8,7 +8,7 @@ inspired by alpha arena和open-nof1.ai项目，本项目在open-nof1.ai基础之
 - 修改前端chat一次输出五条信息的问题，现在只输出一条信息，节省空间
 
   操作指南：
-  - 复制"lib\ai\run.ts"   "prisma\schma.prisma"  "component\models_view.tsx"三个文件到本地覆盖原文件
+  - 复制"lib\ai\run.ts"   "prisma\schma.prisma"  "component\models_view.tsx" “app/api/cron/3-minutes-run-interval/route.ts” "cron.ts"五个文件到本地覆盖原文件
   - 更新数据库在命令行中执行：
     ```
     npx prisma db push

@@ -350,20 +350,6 @@ export async function run(initialCapital?: number) {
         let sellResult;
         const tradingSymbol = `${object.symbol}/USDT`;
 
-        // 🔧 在卖出前先获取持仓信息，以便记录 leverage 和当前持仓数量
-        let positionInfo = null;
-        try {
-          const { fetchPositions } = await import("@/lib/trading/positions");
-          const positions = await fetchPositions();
-          const binanceSymbol = tradingSymbol.replace("/", "");
-          positionInfo = positions.find((p: any) => p.symbol === binanceSymbol && p.contracts !== 0);
-          if (positionInfo) {
-            console.log(`📊 Current position: ${Math.abs(positionInfo.contracts)} contracts @ ${positionInfo.leverage}x leverage`);
-          }
-        } catch (err) {
-          console.warn("⚠️ Failed to fetch position info before sell:", err);
-        }
-
         // 🔧 修复：dry-run模式下也要真正执行卖出（在测试网）
         console.log(`💸 Executing sell ${object.symbol} (${object.sell.percentage}%) (Mode: ${riskConfig.tradingMode})...`);
         sellResult = await sell({
@@ -393,14 +379,139 @@ export async function run(initialCapital?: number) {
         });
 
         // 🔧 收集交易记录，不立即保存
-        // 如果订单执行数据不完整，使用持仓信息作为回退
-        const exitPrice = sellResult.executedPrice || positionInfo?.markPrice;
-        const exitAmount = sellResult.executedAmount || (positionInfo ? Math.abs(positionInfo.contracts) : null);
+        allTradingRecords.push(createTradingData(object, {
+          pricing: sellResult.executedPrice,
+          amount: sellResult.executedAmount,
+        }));
+        continue;
+      }
+
+      if (object.opeartion === Opeartion.Short) {
+        if (!object.short || !object.short.amount || !object.short.pricing || !object.short.leverage) {
+          console.warn("⚠️ Short: missing required parameters");
+          allTradingRecords.push(createTradingData(object, { opeartion: Opeartion.Hold }));
+          continue;
+        }
+
+        const requiredMargin = (object.short.amount * object.short.pricing) / object.short.leverage;
+        console.log(`  Amount: ${object.short.amount} | Price: ${object.short.pricing} | Lev: ${object.short.leverage}x`);
+        console.log(`  Margin: $${requiredMargin.toFixed(2)} | Available: $${remainingAvailableCash.toFixed(2)}`);
+
+        // Per-trade risk check
+        const riskCheck = checkBuyRisk({
+          amount: object.short.amount,
+          price: object.short.pricing,
+          leverage: object.short.leverage,
+          currentBalance: remainingAvailableCash,
+          config: riskConfig,
+        });
+
+        if (!riskCheck.allowed) {
+          console.error(`🚫 Risk control: ${riskCheck.reason}`);
+          allChatMessages.push(`[${object.symbol} SHORT BLOCKED] ${riskCheck.reason}`);
+          allTradingRecords.push(createTradingData(object, {
+            pricing: object.short.pricing,
+            amount: object.short.amount,
+            leverage: object.short.leverage,
+          }));
+          continue;
+        }
+
+        if (requiredMargin > remainingAvailableCash) {
+          const reason = `Insufficient margin for SHORT: need $${requiredMargin.toFixed(2)} but have $${remainingAvailableCash.toFixed(2)}`;
+          console.warn(`🚫 ${reason}`);
+          allChatMessages.push(`[${object.symbol} SHORT BLOCKED] ${reason}`);
+          allTradingRecords.push(createTradingData(object, { opeartion: Opeartion.Hold }));
+          continue;
+        }
+
+        // Execute SHORT position
+        const tradingSymbol = `${object.symbol}/USDT`;
+        console.log(`🔻 Executing SHORT ${object.symbol} (Mode: ${riskConfig.tradingMode})...`);
+
+        // For SHORT positions, we use buy() with negative amount or modify to use short-specific logic
+        // Note: This may need a separate short() function, but for now we'll use buy with different parameters
+        const shortResult = await buy({
+          symbol: tradingSymbol,
+          amount: object.short.amount,
+          leverage: object.short.leverage,
+          stopLossPercent: object.short.stopLossPercent,
+          takeProfitPercent: object.short.takeProfitPercent,
+          isShort: true, // Add flag to indicate this is a SHORT position
+        });
+
+        if (shortResult.success) {
+          console.log(`✅ SHORT executed successfully`);
+          console.log(`   Order ID: ${shortResult.orderId}`);
+          console.log(`   Price: $${shortResult.executedPrice}`);
+          console.log(`   Amount: ${shortResult.executedAmount}`);
+        } else {
+          console.error(`❌ SHORT failed: ${shortResult.error}`);
+        }
+
+        logTrade({
+          action: riskConfig.tradingMode === "live" ? "short" : "dry-run-short",
+          symbol: tradingSymbol,
+          amount: object.short.amount,
+          price: shortResult.executedPrice,
+          leverage: object.short.leverage,
+          orderId: shortResult.orderId,
+          reason: shortResult.success ? "Success" : shortResult.error,
+        });
+
+        if (shortResult?.success) {
+          remainingAvailableCash -= requiredMargin;
+        }
 
         allTradingRecords.push(createTradingData(object, {
-          pricing: exitPrice,
-          amount: exitAmount,
-          leverage: positionInfo?.leverage || null, // 🔧 从持仓信息中获取杠杆
+          pricing: shortResult.executedPrice || object.short.pricing,
+          amount: shortResult.executedAmount || object.short.amount,
+          leverage: object.short.leverage,
+        }));
+        continue;
+      }
+
+      if (object.opeartion === Opeartion.Cover) {
+        if (!object.cover || object.cover.percentage == null) {
+          console.warn("⚠️ Cover: missing percentage");
+          allTradingRecords.push(createTradingData(object, { opeartion: Opeartion.Hold }));
+          continue;
+        }
+
+        // Execute COVER (close SHORT position)
+        const tradingSymbol = `${object.symbol}/USDT`;
+        console.log(`📈 Executing COVER ${object.symbol} (${object.cover.percentage}%) (Mode: ${riskConfig.tradingMode})...`);
+
+        const coverResult = await sell({
+          symbol: tradingSymbol,
+          percentage: object.cover.percentage,
+          isCover: true, // Add flag to indicate this is covering a SHORT position
+        });
+
+        if (coverResult.success) {
+          console.log(`✅ COVER executed successfully`);
+          console.log(`   Order ID: ${coverResult.orderId}`);
+          console.log(`   Price: $${coverResult.executedPrice}`);
+          console.log(`   Amount: ${coverResult.executedAmount}`);
+        } else {
+          console.error(`❌ COVER failed: ${coverResult.error}`);
+          if (coverResult.error?.includes("No open position")) {
+            console.warn(`⚠️ No SHORT position to cover`);
+          }
+        }
+
+        logTrade({
+          action: riskConfig.tradingMode === "live" ? "cover" : "dry-run-cover",
+          symbol: tradingSymbol,
+          amount: coverResult.executedAmount || 0,
+          price: coverResult.executedPrice,
+          orderId: coverResult.orderId,
+          reason: coverResult.success ? "Success" : coverResult.error,
+        });
+
+        allTradingRecords.push(createTradingData(object, {
+          pricing: coverResult.executedPrice,
+          amount: coverResult.executedAmount,
         }));
         continue;
       }

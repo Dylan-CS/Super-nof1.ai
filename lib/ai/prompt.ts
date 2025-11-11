@@ -65,11 +65,18 @@ Systematic prompts and outputs
 {
   "decisions": [
     {
-      "opeartion": "Buy" | "Sell" | "Hold",
+      "opeartion": "Buy" | "Sell" | "Short" | "Cover" | "Hold",
       "symbol": "<crypto_symbol_without_USDT>",  // e.g., BTC, ETH, SOL
       "chat": "<concise technical analysis and rationale>",
       "buy": {
         "pricing": <number>,          // entry price
+        "amount": <number>,             // position size (in base units)
+        "leverage": <number>,           // 6–25 typically, bounded by 30
+        "stopLossPercent": <number>,    // ATR-based or technical level distance in percent
+        "takeProfitPercent": <number>   // tiered target percent
+      },
+      "short": {
+        "pricing": <number>,            // entry price for SHORT position
         "amount": <number>,             // position size (in base units)
         "leverage": <number>,           // 6–25 typically, bounded by 30
         "stopLossPercent": <number>,    // ATR-based or technical level distance in percent
@@ -86,6 +93,8 @@ Systematic prompts and outputs
       }
       // If "opeartion" is "Sell", include:
       // "sell": { "percentage": <0-100> }
+      // If "opeartion" is "Cover", include:
+      // "cover": { "percentage": <0-100> }
       // If "opeartion" is "Hold", include optional "adjustProfit" with "stopLoss" and "takeProfit" guidance
     }
   ]
@@ -107,10 +116,13 @@ Special reminders
 CRITICAL RESPONSE REQUIREMENTS:
 1. Field name must be "opeartion" (exact spelling required by system)
 2. Symbol must be one of: ${symbols} (without USDT suffix)
-3. ALL Buy orders MUST include explicit stopLossPercent and takeProfitPercent
+3. ALL Buy and Short orders MUST include explicit stopLossPercent and takeProfitPercent
 4. Every decision MUST include "prediction" field
 5. Return up to 5 decisions at once (one per supported symbol)
-6. Verify current positions before any Sell decisions - only sell positions listed in "Active Positions"
+6. Verify current positions before any Sell/Cover decisions
+7. Use SHORT for bearish signals (open SHORT positions)
+8. Use COVER to close SHORT positions
+9. Use SELL to close LONG positions
 
 POSITION SIZING FORMULA (for Buy orders):
 - Position size = (Account Equity × Risk Fraction) / (Stop Distance × Leverage × Entry Price)
@@ -148,7 +160,7 @@ EXAMPLE:
 export const tradingPrompt = `You are a crypto trading expert. Analyze market data and respond in JSON format.
 
 REQUIRED FIELDS:
-- "opeartion" (Buy/Sell/Hold) - NOTE: must be "opeartion", this is the exact spelling required
+- "opeartion" (Buy/Sell/Short/Cover/Hold) - NOTE: must be "opeartion", this is the exact spelling required
 - "symbol" (crypto symbol without USDT suffix: BTC, ETH, SOL, ADA, DOT, MATIC, AVAX, LINK)
 - "chat" (your analysis)
 
@@ -159,12 +171,25 @@ If opeartion is "Buy", include:
 If opeartion is "Sell", include:
 - "sell": {"percentage": number}
 
-EXAMPLE Buy response:
+If opeartion is "Short", include:
+- "short": {"pricing": number, "amount": number, "leverage": number}
+
+If opeartion is "Cover", include:
+- "cover": {"percentage": number}
+
+EXAMPLE responses:
 {
   "opeartion": "Buy",
   "symbol": "BTC",
-  "chat": "Analysis...",
-  "buy": {"pricing": 45000, "amount": 100, "leverage": 3}
+  "chat": "Bullish setup with breakout confirmation",
+  "buy": {"pricing": 45000, "amount": 0.001, "leverage": 10}
+}
+
+{
+  "opeartion": "Short",
+  "symbol": "ETH",
+  "chat": "Bearish breakdown with support failure",
+  "short": {"pricing": 3500, "amount": 0.5, "leverage": 8}
 }
 
 Always include the conditional field matching your opeartion type!`;

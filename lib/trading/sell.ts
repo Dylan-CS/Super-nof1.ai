@@ -6,6 +6,7 @@ export interface SellParams {
     percentage?: number; // Percentage of position to close (0-100)
     amount?: number; // Absolute amount to sell (overrides percentage)
     price?: number; // Optional limit price, omit for market order
+    isCover?: boolean; // Flag to indicate this is covering a SHORT position
 }
 
 export interface SellResult {
@@ -23,7 +24,7 @@ const SYMBOL_PRECISION: Record<string, { quantity: number; price: number; minNot
     "BTCUSDT": { quantity: 3, price: 1, minNotional: 5 },   // 0.001 BTC, 最小$5
     "ETHUSDT": { quantity: 2, price: 2, minNotional: 5 },   // 0.01 ETH, 最小$5
     "BNBUSDT": { quantity: 1, price: 2, minNotional: 5 },   // 0.1 BNB, 最小$5
-    "SOLUSDT": { quantity: 1, price: 3, minNotional: 5 },   // 0.1 SOL, 最小$5
+    "SOLUSDT": { quantity: 0, price: 3, minNotional: 5 },   // 1 SOL, 最小$5
     "ADAUSDT": { quantity: 0, price: 4, minNotional: 5 },   // 1 ADA, 最小$5
     "DOGEUSDT": { quantity: 0, price: 5, minNotional: 5 },  // 1 DOGE, 最小$5 🐕
 };
@@ -207,9 +208,9 @@ export async function sell(params: SellParams): Promise<SellResult> {
 
         // Extract order details from Binance response
         const executedPrice = orderResult.avgPrice ? parseFloat(orderResult.avgPrice) :
-                            (orderResult.price ? parseFloat(orderResult.price) : undefined);
+                            (orderResult.price ? parseFloat(orderResult.price) : 0);
         const executedAmount = orderResult.executedQty ? parseFloat(orderResult.executedQty) :
-                             (orderResult.origQty ? parseFloat(orderResult.origQty) : undefined);
+                             (orderResult.origQty ? parseFloat(orderResult.origQty) : 0);
 
         return {
             success: true,

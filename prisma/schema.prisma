@@ -89,6 +89,8 @@ model TradingLesson {
 enum Opeartion {
   Buy
   Sell
+  Short
+  Cover
   Hold
 }
 

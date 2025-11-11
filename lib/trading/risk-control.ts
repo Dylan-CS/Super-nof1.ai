@@ -96,7 +96,7 @@ export function checkDailyLossLimit(params: {
  * Log trade execution (for audit trail)
  */
 export function logTrade(params: {
-    action: "buy" | "sell" | "dry-run-buy" | "dry-run-sell";
+    action: "buy" | "sell" | "short" | "cover" | "dry-run-buy" | "dry-run-sell" | "dry-run-short" | "dry-run-cover";
     symbol: string;
     amount: number;
     price?: number;

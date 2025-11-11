@@ -76,6 +76,7 @@ async function getPositionMode(): Promise<"ONE_WAY" | "DUAL_SIDE"> {
     autoSetStopLoss?: boolean; // 自动设置止损，默�?true
     stopLossPercent?: number; // 止损百分比，默认 3%
     takeProfitPercent?: number; // 止盈百分比，默认 10%
+    isShort?: boolean; // Flag to indicate this is a SHORT position
 }
 
 export interface BuyResult {

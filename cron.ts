@@ -80,4 +80,7 @@ cron.schedule("*/3 * * * *", async () => {
   await runChatInterval();
 });
 
-await runChatInterval();
+// Run once on startup
+(async () => {
+  await runChatInterval();
+})();

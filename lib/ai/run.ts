@@ -393,9 +393,13 @@ export async function run(initialCapital?: number) {
         });
 
         // 🔧 收集交易记录，不立即保存
+        // 如果订单执行数据不完整，使用持仓信息作为回退
+        const exitPrice = sellResult.executedPrice || positionInfo?.markPrice;
+        const exitAmount = sellResult.executedAmount || (positionInfo ? Math.abs(positionInfo.contracts) : null);
+
         allTradingRecords.push(createTradingData(object, {
-          pricing: sellResult.executedPrice,
-          amount: sellResult.executedAmount || 0,
+          pricing: exitPrice,
+          amount: exitAmount,
           leverage: positionInfo?.leverage || null, // 🔧 从持仓信息中获取杠杆
         }));
         continue;

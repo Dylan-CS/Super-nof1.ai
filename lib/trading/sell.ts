@@ -206,11 +206,16 @@ export async function sell(params: SellParams): Promise<SellResult> {
         console.log(`✅ Sell order created successfully:`, orderResult);
 
         // Extract order details from Binance response
+        const executedPrice = orderResult.avgPrice ? parseFloat(orderResult.avgPrice) :
+                            (orderResult.price ? parseFloat(orderResult.price) : undefined);
+        const executedAmount = orderResult.executedQty ? parseFloat(orderResult.executedQty) :
+                             (orderResult.origQty ? parseFloat(orderResult.origQty) : undefined);
+
         return {
             success: true,
             orderId: orderResult.orderId?.toString(),
-            executedPrice: orderResult.avgPrice ? parseFloat(orderResult.avgPrice) : (orderResult.price ? parseFloat(orderResult.price) : 0),
-            executedAmount: orderResult.executedQty ? parseFloat(orderResult.executedQty) : (orderResult.origQty ? parseFloat(orderResult.origQty) : 0),
+            executedPrice,
+            executedAmount,
         };
     } catch (error: any) {
         const errorMessage = error?.response?.data?.msg || error.message || "Unknown error occurred during sell";
